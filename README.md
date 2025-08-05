@@ -22,5 +22,12 @@ This is a basic example which shows you how to solve a common problem:
 ``` r
 library(MedPower)
 ## basic example code
+
+MedPower_CC(
+  beta1 = sqrt(0.25),
+  theta2 = 0.29,
+  theta3 = 0,
+  power = 0.8
+)
 ```
 
