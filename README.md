@@ -4,14 +4,15 @@
 <!-- badges: start -->
 <!-- badges: end -->
 
-The goal of MedPower is to ...
+The goal of MedPower is to calculate power or sample size to detect natural direct effects for causal mediation analysis.
 
 ## Installation
 
 You can install the development version of MedPower like so:
 
 ``` r
-# FILL THIS IN! HOW CAN PEOPLE INSTALL YOUR DEV PACKAGE?
+library(devtools)
+devtools::install_github("tatub1/MedPower")
 ```
 
 ## Example
