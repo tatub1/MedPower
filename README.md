@@ -4,7 +4,7 @@
 <!-- badges: start -->
 <!-- badges: end -->
 
-The goal of MedPower is to calculate power or sample size to detect natural direct effects for causal mediation analysis.
+The goal of MedPower is to calculate power or sample size to detect natural indirect effects for causal mediation analysis.
 
 ## Installation
 
