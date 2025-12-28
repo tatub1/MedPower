@@ -19,9 +19,10 @@ devtools::install_github("tatub1/MedPower")
 
 This is a basic example which shows you how to solve a sample-size problem:
 
+
 ``` r
-library(MedPower)
 ## Basic sample-size calculation example code
+library(MedPower)
 
 MedPower_CC(           # In this example, we assume mediator and outcome are continuous.
   beta1 = sqrt(0.25),
