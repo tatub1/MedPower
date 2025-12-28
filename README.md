@@ -17,11 +17,14 @@ devtools::install_github("tatub1/MedPower")
 
 ## Example
 
-This is a basic example which shows you how to solve a common problem:
+This is a basic example which shows you how to solve a sample-size problem:
 
 ``` r
 library(MedPower)
-## basic example code
+## Basic sample-size calculation example code
+## We assume mediator and outcome are continuous.
+## default values are set as all variances=1, alpha=0.05.
+## You have to specify either power or sample size.
 
 MedPower_CC(
   beta1 = sqrt(0.25),
