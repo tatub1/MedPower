@@ -1,37 +1,103 @@
-#' Sample size or power calculation for mediation analysis (variable type BB)
+#' Sample size or power calculation for mediation analysis (BB)
 #'
-#' This function computes either the statistical power or the required sample size
-#' for detecting a natural indirect effect in a mediation model where both the
-#' mediator and the outcome are binary (variable type BB).
+#' Calculate power or sample size for the joint significance test when the
+#' mediator and outcome are binary and exposure A is coded 0/1.
 #'
 #' @param alpha Significance level. Default is 0.05.
-#' @param pA Proportion of treated or exposed individuals. Default is 0.5.
-#' @param pM Marginal probability of the binary mediator being 1. Default is 0.5.
-#' @param theta0 Intercept in the outcome model.
-#' @param theta1 Effect of exposure on outcome.
-#' @param beta1 Effect of exposure on binary mediator (log-odds scale).
-#' @param theta2 Effect of mediator on outcome (log-odds scale).
-#' @param theta3 Interaction effect between exposure and mediator on outcome (log-odds scale).
-#' @param power Target power. If specified, the function returns the required sample size.
-#' @param n Sample size. If specified, the function returns the corresponding power.
+#' @param pA Proportion with A = 1. Default is 0.5.
+#' @param pM Marginal probability Pr(M = 1) for the no-covariate reference model,
+#'   used only when beta0 is NULL. Default is 0.5. It cannot identify the
+#'   conditional mediator intercept in a covariate-adjusted model.
+#' @param theta0 Log-odds intercept of the adjusted outcome model at
+#'   A = 0, M = 0, and C = 0. Not the logit of marginal outcome prevalence.
+#' @param theta1 Exposure coefficient in the logistic outcome model at M = 0.
+#' @param beta1 Exposure coefficient in the logistic mediator model (log-odds).
+#' @param theta2 Mediator coefficient in the logistic outcome model at A = 0.
+#' @param theta3 Exposure-mediator interaction coefficient (log-odds). Default is 0.
+#' @param power Target power between 0 and 1.
+#' @param n Sample size, an integer of at least 2. Supply exactly one of n or power.
+#' @param vif_m User-specified additional variance inflation factor for beta1.
+#'   The manuscript uses 1 / (1 - R_M^2), where R_M^2 is from the auxiliary
+#'   linear regression A ~ C, not a logistic pseudo-R-squared. The correction
+#'   is approximate for the logistic mediator model. Must be finite and >= 1.
+#'   Default is 1, meaning no additional variance inflation is assumed.
+#' @param vif_y User-specified additional variance inflation factor for
+#'   delta1 = theta2 + theta3. Define M0 = (1 - A) * M and M1 = A * M.
+#'   The manuscript's incremental factor for adding C is RSS_base / RSS_full
+#'   from the auxiliary linear regressions M1 ~ A + M0 and M1 ~ A + M0 + C,
+#'   fitted to the same observations. It is not the ordinary VIF of M1 relative
+#'   to an intercept-only model. Must be finite and >= 1. Default is 1.
+#' @param beta0 Optional intercept of the logistic mediator model at A = 0
+#'   and C = 0. If NULL, it is recovered from pA, pM, and beta1 under a
+#'   no-covariate reference model. Supply a calibrated beta0 for a covariate-
+#'   adjusted design; marginal pM and beta1 do not identify that intercept.
+#'   Do not explicitly supply both beta0 and pM. The default pM is ignored
+#'   when beta0 is supplied.
+#' @param pM_A1 Probability Pr(M = 1 | A = 1), averaging over the covariates
+#'   in the exposed group, used for the outcome-model variance. Defaults to
+#'   plogis(beta0 + beta1) in the no-covariate reference model. For a covariate-
+#'   adjusted design, supply both beta0 and pM_A1 from the same assumed joint
+#'   distribution or suitable pilot data. A supplied pM_A1 requires beta0.
+#'   Do not substitute the probability at C = 0 for the group probability.
 #'
-#' @returns A list containing either:
-#' \describe{
-#'   \item{required_n}{Sample size required to achieve the target power (if \code{power} is specified).}
-#'   \item{achieved_power}{Power achieved with the given sample size (if \code{n} is specified).}
-#' }
+#' @details
+#' VIFs and adjusted-design inputs are user-specified. This function does not
+#'   infer the joint distribution of A, M, and C or calibrate a conditional
+#'   intercept from marginal prevalence in a covariate-adjusted model.
+#'   The no-covariate reference calibration solves
+#'   pM = (1 - pA) * plogis(beta0) + pA * plogis(beta0 + beta1).
+#'   This equality is not generally valid with covariates in the mediator model.
+#'
+#' The mediator variance factor uses the reference probabilities
+#'   r0 = plogis(beta0) and r1 = plogis(beta0 + beta1):
+#'   vif_m * (1 / ((1 - pA) * r0 * (1 - r0)) +
+#'            1 / (pA * r1 * (1 - r1))).
+#'   With covariates, these are probabilities at C = 0, not group averages;
+#'   the formula with vif_m is a working approximation for the conditional
+#'   logistic coefficient variance. Group probabilities alone also do not
+#'   determine its full logistic Fisher information. Use coherent inputs and
+#'   check design accuracy by simulation when covariate effects are substantial.
+#'   A VIF of 1 does not assert absence of confounding.
+#'
+#' The original paper's power approximation is retained:
+#'   Phi(sqrt(n) * effect / sqrt(variance_factor) - qnorm(1 - alpha / 2)).
+#'   It retains only the upper rejection tail and requires positive beta1 and
+#'   positive theta2 + theta3. It is not the full two-sided normal power formula.
+#'   The sample-size search is limited to n <= 100000; an unattainable target
+#'   within that range produces an error.
+#'
+#' In the outcome reference model define q10 = plogis(theta0 + theta1) and
+#'   q11 = plogis(theta0 + theta1 + theta2 + theta3). The variance factor is
+#'   vif_y * (1 / (pA * (1 - pM_A1) * q10 * (1 - q10)) +
+#'            1 / (pA * pM_A1 * q11 * (1 - q11))).
+#'   Without covariates and with consistent probabilities, the uninflated
+#'   logistic coefficient variance factor is the exact asymptotic information
+#'   expression for the saturated A-by-M model. It does not use Whittemore's
+#'   rare-outcome information approximation used in the CB function.
+#'   With covariates, q10 and q11 are reference probabilities at C = 0, and
+#'   multiplication by vif_y is approximate. Neither an unweighted VIF nor
+#'   marginal outcome risks generally recover the full adjusted logistic
+#'   information. This function does not remove any rare-outcome or causal
+#'   assumptions required for the paper's NIE interpretation.
+#'
+#' @returns A list with input_n and computed_power when n is supplied, or
+#'   required_n and achieved_power when power is supplied. Both forms also
+#'   report vif_m, vif_y, beta0, pM_A1, reference mediator probabilities
+#'   pM_A0_reference, pM_A1_reference, pM_reference, and reference outcome
+#'   probabilities pY_A1M0_reference and pY_A1M1_reference. These reference
+#'   probabilities are not adjusted-design group or marginal probabilities
+#'   in general. mediator_input and pM_A1_source identify input sources.
 #'
 #' @export
-#'
 #' @examples
-#' MedPower_BB(
-#'   theta0 = -4,
-#'   theta1 = log(2),
-#'   beta1 = 0.39,
-#'   theta2 = log(3) * 4 / 5,
-#'   theta3 = log(3) * 1 / 5,
-#'   power = 0.8
-#' )
+#' # Original example.
+#' MedPower_BB(theta0 = -4, theta1 = log(2), beta1 = 0.39,
+#'             theta2 = log(3) * 4 / 5, theta3 = log(3) / 5, power = 0.8)
+#'
+#' # Illustrative adjusted-design inputs: supply beta0 instead of pM.
+#' MedPower_BB(theta0 = -4, theta1 = log(2), beta0 = -0.6, beta1 = 0.39,
+#'             pM_A1 = 0.46, theta2 = log(3) * 4 / 5, theta3 = log(3) / 5,
+#'             vif_m = 1.2, vif_y = 1.25, power = 0.8)
 MedPower_BB <- function(
     alpha = 0.05,
     pA = 0.5,
@@ -42,59 +108,134 @@ MedPower_BB <- function(
     theta2,
     theta3 = 0,
     power = NULL,
-    n = NULL
+    n = NULL,
+    vif_m = 1,
+    vif_y = 1,
+    beta0 = NULL,
+    pM_A1 = NULL
 ) {
   if (is.null(n) && is.null(power)) stop("Either 'n' or 'power' must be specified.")
   if (!is.null(n) && !is.null(power)) stop("Specify only one of 'n' or 'power'.")
 
-  q <- pM * (1 + exp(beta1)) + pA * (1 - exp(beta1)) - 1
-  beta0 <- log((q + sqrt(q^2 + 4 * pM * (1 - pM) * exp(beta1))) / (2 * (1 - pM) * exp(beta1)))
-  exp_beta0 <- (q + sqrt(q^2 + 4 * pM * (1 - pM) * exp(beta1))) / (2 * (1 - pM) * exp(beta1))
-
-  E <- (1 + exp(beta0))^2 / (exp(beta0) * (1 - pA))
-  G <- (1 + exp(beta0 + beta1))^2 / (exp(beta0 + beta1) * pA)
-  VarM <- E + G
-
-  A <- (1 + exp(theta0 + theta1))^2 / exp(theta0 + theta1)
-  B <- (1 + exp(beta0 + beta1)) / pA
-  C <- (1 + exp(theta0 + theta1 + theta2 + theta3))^2 / exp(theta0 + theta1 + theta2 + theta3)
-  D <- (1 + exp(beta0 + beta1)) / (exp(beta0 + beta1) * pA)
-  VarY <- A * B + C * D
-
-  Test_beta <- beta1 / sqrt(VarM)
-  Test_theta <- (theta2 + theta3) / sqrt(VarY)
-
-  compute_power <- function(n_val) {
-    power1 <- pnorm(Test_beta * sqrt(n_val) - qnorm(1 - alpha / 2))
-    power2 <- pnorm(Test_theta * sqrt(n_val) - qnorm(1 - alpha / 2))
-    return(power1 * power2)
+  scalar <- function(x, name) {
+    if (!is.numeric(x) || length(x) != 1L || !is.finite(x)) {
+      stop(sprintf("'%s' must be a finite numeric scalar.", name), call. = FALSE)
+    }
   }
+  inputs <- list(alpha = alpha, pA = pA, theta0 = theta0, theta1 = theta1,
+                 beta1 = beta1, theta2 = theta2, theta3 = theta3,
+                 vif_m = vif_m, vif_y = vif_y)
+  for (nm in names(inputs)) scalar(inputs[[nm]], nm)
+  if (alpha <= 0 || alpha >= 1) stop("'alpha' must be between 0 and 1.")
+  if (pA <= 0 || pA >= 1) stop("'pA' must be between 0 and 1.")
+  if (vif_m < 1 || vif_y < 1) stop("'vif_m' and 'vif_y' must be at least 1.")
+  delta1 <- theta2 + theta3
+  if (!is.finite(delta1)) stop("'theta2 + theta3' must be finite.")
+  if (beta1 <= 0 || delta1 <= 0) {
+    stop(paste("The retained upper-tail power approximation requires positive",
+               "'beta1' and positive 'theta2 + theta3'."))
+  }
+  beta0_supplied <- !is.null(beta0)
+  pM_A1_supplied <- !is.null(pM_A1)
+  if (beta0_supplied) {
+    scalar(beta0, "beta0")
+    if (!missing(pM)) {
+      stop("Supply 'beta0' or 'pM', not both; 'pM' only calibrates the no-covariate reference model.")
+    }
+    mediator_input <- "beta0"
+  } else {
+    if (pM_A1_supplied) {
+      stop("Supply a calibrated 'beta0' when supplying 'pM_A1'.")
+    }
+    scalar(pM, "pM")
+    if (pM <= 0 || pM >= 1) stop("'pM' must be between 0 and 1.")
+    # A monotone root avoids overflow/cancellation in the quadratic formula.
+    upper <- stats::qlogis(pM)
+    lower <- upper - beta1
+    marginal_difference <- function(b0) {
+      (1 - pA) * stats::plogis(b0) + pA * stats::plogis(b0 + beta1) - pM
+    }
+    if (lower == upper || marginal_difference(upper) == 0) {
+      beta0 <- upper
+    } else if (marginal_difference(lower) == 0) {
+      beta0 <- lower
+    } else {
+      beta0 <- stats::uniroot(marginal_difference, c(lower, upper),
+                              tol = 1e-12, maxiter = 1000L)$root
+    }
+    mediator_input <- "pM_reference"
+  }
+
+  eta_M1 <- beta0 + beta1
+  if (!is.finite(eta_M1)) stop("'beta0 + beta1' must be finite.")
+  pM_A0_reference <- stats::plogis(beta0)
+  pM_A1_reference <- stats::plogis(eta_M1)
+  if (!pM_A1_supplied) pM_A1 <- pM_A1_reference
+  scalar(pM_A1, "pM_A1")
+  if (pM_A1 <= 0 || pM_A1 >= 1) {
+    stop("The supplied or derived 'pM_A1' must be numerically between 0 and 1.")
+  }
+
+  # Work on the log scale so probabilities near a boundary do not suffer
+  # cancellation from 1 - plogis(eta) in the reference-model information.
+  log_inv_bernoulli_var <- function(eta) {
+    -stats::plogis(eta, log.p = TRUE) -
+      stats::plogis(eta, lower.tail = FALSE, log.p = TRUE)
+  }
+  log_add <- function(x, y) {
+    m <- max(x, y)
+    m + log(exp(x - m) + exp(y - m))
+  }
+  log_E <- log_inv_bernoulli_var(beta0) - log1p(-pA)
+  log_G <- log_inv_bernoulli_var(eta_M1) - log(pA)
+  VarM <- exp(log(vif_m) + log_add(log_E, log_G))
+  eta_Y10 <- theta0 + theta1
+  eta_Y11 <- eta_Y10 + delta1
+  if (!is.finite(eta_Y10) || !is.finite(eta_Y11)) {
+    stop("Reference outcome log-odds are outside the supported numeric range.")
+  }
+  log_term0 <- log_inv_bernoulli_var(eta_Y10) - log(pA) - log1p(-pM_A1)
+  log_term1 <- log_inv_bernoulli_var(eta_Y11) - log(pA) - log(pM_A1)
+  VarY <- exp(log(vif_y) + log_add(log_term0, log_term1))
+  outcome_assumptions <- list(pY_A1M0_reference = stats::plogis(eta_Y10),
+                              pY_A1M1_reference = stats::plogis(eta_Y11))
+  if (!is.finite(VarM) || !is.finite(VarY) || VarM <= 0 || VarY <= 0) {
+    stop("Variance calculation is outside the supported numeric range.")
+  }
+  Test_beta <- beta1 / sqrt(VarM)
+  Test_theta <- delta1 / sqrt(VarY)
+  if (!is.finite(Test_beta) || !is.finite(Test_theta)) {
+    stop("Effect calculation is outside the supported numeric range.")
+  }
+  compute_power <- function(n_val) {
+    power1 <- stats::pnorm(Test_beta * sqrt(n_val) - stats::qnorm(1 - alpha / 2))
+    power2 <- stats::pnorm(Test_theta * sqrt(n_val) - stats::qnorm(1 - alpha / 2))
+    power1 * power2
+  }
+  assumptions <- list(
+    vif_m = vif_m, vif_y = vif_y, beta0 = beta0, pM_A1 = pM_A1,
+    pM_A0_reference = pM_A0_reference, pM_A1_reference = pM_A1_reference,
+    pM_reference = (1 - pA) * pM_A0_reference + pA * pM_A1_reference,
+    mediator_input = mediator_input,
+    pM_A1_source = if (pM_A1_supplied) "user" else "reference_model"
+  )
+  assumptions <- c(assumptions, outcome_assumptions)
 
   if (!is.null(n)) {
-    pow <- compute_power(n)
-    return(list(
-      input_n = n,
-      computed_power = pow
-    ))
+    scalar(n, "n")
+    if (n < 2 || n != floor(n)) stop("'n' must be an integer of at least 2.")
+    return(c(list(input_n = n, computed_power = compute_power(n)), assumptions))
   }
-
-  find_min_n <- function(target_power, min_n = 2, max_n = 100000) {
-    while (min_n < max_n) {
-      mid <- floor((min_n + max_n) / 2)
-      if (compute_power(mid) < target_power) {
-        min_n <- mid + 1
-      } else {
-        max_n <- mid
-      }
-    }
-    return(min_n)
+  scalar(power, "power")
+  if (power <= 0 || power >= 1) stop("'power' must be between 0 and 1.")
+  min_n <- 2
+  max_n <- 100000
+  if (compute_power(max_n) < power) {
+    stop("Target power is not reached within the search limit of n = 100000.")
   }
-
-  n_found <- find_min_n(power)
-  power_at_n <- compute_power(n_found)
-
-  return(list(
-    required_n = n_found,
-    achieved_power = power_at_n
-  ))
+  while (min_n < max_n) {
+    mid <- floor((min_n + max_n) / 2)
+    if (compute_power(mid) < power) min_n <- mid + 1 else max_n <- mid
+  }
+  c(list(required_n = min_n, achieved_power = compute_power(min_n)), assumptions)
 }

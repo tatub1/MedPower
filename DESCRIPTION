@@ -1,13 +1,26 @@
 Package: MedPower
-Title: Power and Sample size calculation for NIE
-Version: 0.0.0.1
-Authors@R: 
-    person("Tatsuro", "Ozaki", , "t.ozaki@keio.jp", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+Title: Power and Sample Size for Mediation Analysis
+Version: 0.1.0
+Authors@R:
+    person("Tatsuro", "Ozaki", email = "t.ozaki@keio.jp",
+           role = c("aut", "cre"))
+Description: Calculates approximate power and sample size for joint
+    significance tests of natural indirect effects in mediation models with
+    binary exposure and continuous or binary mediators and outcomes.
+    Supports exposure-mediator interaction and user-specified variance
+    inflation factors (VIFs) for covariate adjustment. With compatible
+    design inputs and residual variances, VIF corrections to coefficient
+    variances are exact under correctly specified homoskedastic linear
+    models and approximate for logistic models. The continuous-mediator,
+    binary-outcome calculation uses a rare-outcome approximation. The
+    retained power approximation requires positive exposure-to-mediator
+    and exposed-group mediator-to-outcome coefficients.
 License: MIT + file LICENSE
 Encoding: UTF-8
+Imports:
+    stats
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
-Suggests: 
+Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0

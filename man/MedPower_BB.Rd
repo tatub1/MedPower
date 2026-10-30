@@ -2,7 +2,7 @@
 % Please edit documentation in R/MedPower_BB.R
 \name{MedPower_BB}
 \alias{MedPower_BB}
-\title{Sample size or power calculation for mediation analysis (variable type BB)}
+\title{Sample size or power calculation for mediation analysis (BB)}
 \usage{
 MedPower_BB(
   alpha = 0.05,
@@ -14,49 +14,124 @@ MedPower_BB(
   theta2,
   theta3 = 0,
   power = NULL,
-  n = NULL
+  n = NULL,
+  vif_m = 1,
+  vif_y = 1,
+  beta0 = NULL,
+  pM_A1 = NULL
 )
 }
 \arguments{
 \item{alpha}{Significance level. Default is 0.05.}
 
-\item{pA}{Proportion of treated or exposed individuals. Default is 0.5.}
+\item{pA}{Proportion with A = 1. Default is 0.5.}
 
-\item{pM}{Marginal probability of the binary mediator being 1. Default is 0.5.}
+\item{pM}{Marginal probability Pr(M = 1) for the no-covariate reference model,
+used only when beta0 is NULL. Default is 0.5. It cannot identify the
+conditional mediator intercept in a covariate-adjusted model.}
 
-\item{theta0}{Intercept in the outcome model.}
+\item{theta0}{Log-odds intercept of the adjusted outcome model at
+A = 0, M = 0, and C = 0. Not the logit of marginal outcome prevalence.}
 
-\item{theta1}{Effect of exposure on outcome.}
+\item{theta1}{Exposure coefficient in the logistic outcome model at M = 0.}
 
-\item{beta1}{Effect of exposure on binary mediator (log-odds scale).}
+\item{beta1}{Exposure coefficient in the logistic mediator model (log-odds).}
 
-\item{theta2}{Effect of mediator on outcome (log-odds scale).}
+\item{theta2}{Mediator coefficient in the logistic outcome model at A = 0.}
 
-\item{theta3}{Interaction effect between exposure and mediator on outcome (log-odds scale).}
+\item{theta3}{Exposure-mediator interaction coefficient (log-odds). Default is 0.}
 
-\item{power}{Target power. If specified, the function returns the required sample size.}
+\item{power}{Target power between 0 and 1.}
 
-\item{n}{Sample size. If specified, the function returns the corresponding power.}
+\item{n}{Sample size, an integer of at least 2. Supply exactly one of n or power.}
+
+\item{vif_m}{User-specified additional variance inflation factor for beta1.
+The manuscript uses 1 / (1 - R_M^2), where R_M^2 is from the auxiliary
+linear regression A ~ C, not a logistic pseudo-R-squared. The correction
+is approximate for the logistic mediator model. Must be finite and >= 1.
+Default is 1, meaning no additional variance inflation is assumed.}
+
+\item{vif_y}{User-specified additional variance inflation factor for
+delta1 = theta2 + theta3. Define M0 = (1 - A) * M and M1 = A * M.
+The manuscript's incremental factor for adding C is RSS_base / RSS_full
+from the auxiliary linear regressions M1 ~ A + M0 and M1 ~ A + M0 + C,
+fitted to the same observations. It is not the ordinary VIF of M1 relative
+to an intercept-only model. Must be finite and >= 1. Default is 1.}
+
+\item{beta0}{Optional intercept of the logistic mediator model at A = 0
+and C = 0. If NULL, it is recovered from pA, pM, and beta1 under a
+no-covariate reference model. Supply a calibrated beta0 for a covariate-
+adjusted design; marginal pM and beta1 do not identify that intercept.
+Do not explicitly supply both beta0 and pM. The default pM is ignored
+when beta0 is supplied.}
+
+\item{pM_A1}{Probability Pr(M = 1 | A = 1), averaging over the covariates
+in the exposed group, used for the outcome-model variance. Defaults to
+plogis(beta0 + beta1) in the no-covariate reference model. For a covariate-
+adjusted design, supply both beta0 and pM_A1 from the same assumed joint
+distribution or suitable pilot data. A supplied pM_A1 requires beta0.
+Do not substitute the probability at C = 0 for the group probability.}
 }
 \value{
-A list containing either:
-\describe{
-\item{required_n}{Sample size required to achieve the target power (if \code{power} is specified).}
-\item{achieved_power}{Power achieved with the given sample size (if \code{n} is specified).}
-}
+A list with input_n and computed_power when n is supplied, or
+required_n and achieved_power when power is supplied. Both forms also
+report vif_m, vif_y, beta0, pM_A1, reference mediator probabilities
+pM_A0_reference, pM_A1_reference, pM_reference, and reference outcome
+probabilities pY_A1M0_reference and pY_A1M1_reference. These reference
+probabilities are not adjusted-design group or marginal probabilities
+in general. mediator_input and pM_A1_source identify input sources.
 }
 \description{
-This function computes either the statistical power or the required sample size
-for detecting a natural indirect effect in a mediation model where both the
-mediator and the outcome are binary (variable type BB).
+Calculate power or sample size for the joint significance test when the
+mediator and outcome are binary and exposure A is coded 0/1.
+}
+\details{
+VIFs and adjusted-design inputs are user-specified. This function does not
+infer the joint distribution of A, M, and C or calibrate a conditional
+intercept from marginal prevalence in a covariate-adjusted model.
+The no-covariate reference calibration solves
+pM = (1 - pA) * plogis(beta0) + pA * plogis(beta0 + beta1).
+This equality is not generally valid with covariates in the mediator model.
+
+The mediator variance factor uses the reference probabilities
+r0 = plogis(beta0) and r1 = plogis(beta0 + beta1):
+vif_m * (1 / ((1 - pA) * r0 * (1 - r0)) +
+1 / (pA * r1 * (1 - r1))).
+With covariates, these are probabilities at C = 0, not group averages;
+the formula with vif_m is a working approximation for the conditional
+logistic coefficient variance. Group probabilities alone also do not
+determine its full logistic Fisher information. Use coherent inputs and
+check design accuracy by simulation when covariate effects are substantial.
+A VIF of 1 does not assert absence of confounding.
+
+The original paper's power approximation is retained:
+Phi(sqrt(n) * effect / sqrt(variance_factor) - qnorm(1 - alpha / 2)).
+It retains only the upper rejection tail and requires positive beta1 and
+positive theta2 + theta3. It is not the full two-sided normal power formula.
+The sample-size search is limited to n <= 100000; an unattainable target
+within that range produces an error.
+
+In the outcome reference model define q10 = plogis(theta0 + theta1) and
+q11 = plogis(theta0 + theta1 + theta2 + theta3). The variance factor is
+vif_y * (1 / (pA * (1 - pM_A1) * q10 * (1 - q10)) +
+1 / (pA * pM_A1 * q11 * (1 - q11))).
+Without covariates and with consistent probabilities, the uninflated
+logistic coefficient variance factor is the exact asymptotic information
+expression for the saturated A-by-M model. It does not use Whittemore's
+rare-outcome information approximation used in the CB function.
+With covariates, q10 and q11 are reference probabilities at C = 0, and
+multiplication by vif_y is approximate. Neither an unweighted VIF nor
+marginal outcome risks generally recover the full adjusted logistic
+information. This function does not remove any rare-outcome or causal
+assumptions required for the paper's NIE interpretation.
 }
 \examples{
-MedPower_BB(
-  theta0 = -4,
-  theta1 = log(2),
-  beta1 = 0.39,
-  theta2 = log(3) * 4 / 5,
-  theta3 = log(3) * 1 / 5,
-  power = 0.8
-)
+# Original example.
+MedPower_BB(theta0 = -4, theta1 = log(2), beta1 = 0.39,
+            theta2 = log(3) * 4 / 5, theta3 = log(3) / 5, power = 0.8)
+
+# Illustrative adjusted-design inputs: supply beta0 instead of pM.
+MedPower_BB(theta0 = -4, theta1 = log(2), beta0 = -0.6, beta1 = 0.39,
+            pM_A1 = 0.46, theta2 = log(3) * 4 / 5, theta3 = log(3) / 5,
+            vif_m = 1.2, vif_y = 1.25, power = 0.8)
 }
